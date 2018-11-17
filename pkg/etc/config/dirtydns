@@ -1,0 +1,7 @@
+
+config server
+  option port '5353'
+  option ipset_dirty 'ss_spec_dst_bp'
+  option dirty_upstream '8.8.8.8:53'
+  option secured_upstream '127.0.0.1:5300'
+

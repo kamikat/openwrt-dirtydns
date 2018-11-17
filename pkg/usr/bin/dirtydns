@@ -1,0 +1,21 @@
+#!/bin/sh
+
+export BIND_PORT=${1:-"5353"}
+
+export DIRTY_UPSTREAM=${2:-"8.8.8.8:53"}
+export SECURED_UPSTREAM=${3:-"127.0.0.1:5300"}
+
+export DIRTY_IPSET=${4:-'ss_spec_dst_bp'}
+
+cat << MESSAGE
+DirtyDNS query pipeline:
+
+  1. Query dirty result on '$DIRTY_UPSTREAM'.
+  2. Check '$DIRTY_IPSET', use dirty result if match.
+  3. Otherwise, forward query to '$SECURED_UPSTREAM'.
+
+MESSAGE
+
+echo "Listening on $BIND_PORT..."
+
+exec socat -u UDP4-RECVFROM:$BIND_PORT,fork,reuseaddr SYSTEM:"dirtydns-forwarder"
