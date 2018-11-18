@@ -6,22 +6,38 @@ DirtyDNS is an DNS forwarder written in Shell script.
 
 DirtyDNS requires a dirty server and a secured server to work.
 
-A record from dirty server is tested against a IP whitelist,
-the dirty result is adopted when matches or DirtyDNS forward query to secured server.
+DNS forwarding is a traditional way to avoid DNS pollution.
+However, forwarding all DNS query through a secured upstream (e.g. SSH tunnel/shadowsocks tunnel)
+breaks DNS-based load balance policy of content provider.
+DirtyDNS checks responses from dirty server against an IP whitelist (require [ipset](http://ipset.netfilter.org/)).
+Query is forwarded to secured upstream when dirty response does not match the whitelist, or a dirty response is responded.
+
+![sequence](www/sequence.png?raw=true)
+
+For example, using following whitelist (shapes represent for unique IP addresses):
+
+![whitelist](www/whitelist.png?raw=true)
+
+| Query   | Response                                                            |
+|---------|---------------------------------------------------------------------|
+| Query 1 | Dirty response is chosen (matches whitelist).                       |
+| Query 2 | Dirty response is ignored and query is forwarded to secured server. |
+| Query 3 | Both responses match whitelist. Dirty result (optimal) is chosen.   |
+| Query 4 | Dirty server fails and query is forwarded to secured server.        |
 
 DirtyDNS can be configured in UCI:
 
-| option           | description                                   |
+| Option           | Description                                   |
 |------------------|-----------------------------------------------|
 | port             | UDP port to listen (default: 5353)            |
 | dirty_upstream   | dirty name server (default: 8.8.8.8:53)       |
 | secured_upstream | secured name server (default: 127.0.0.1:5300) |
 | ipset_dirty      | name of an ipset (default: ss_spec_dst_bp)    |
 
-NOTE: default configuration is compatible with
-[luci-app-shadowsocks](https://github.com/shadowsocks/luci-app-shadowsocks)
+Default configuration is compatible with
+[openwrt-shadowsocks](https://github.com/shadowsocks/openwrt-shadowsocks) ("transparent proxy" and "port forward" should be enabled).
 
-## Install
+## Installation
 
 ```
 # package
