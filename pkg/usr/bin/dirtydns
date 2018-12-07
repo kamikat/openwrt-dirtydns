@@ -18,4 +18,4 @@ MESSAGE
 
 echo "Listening on $BIND_PORT..."
 
-exec socat -u UDP4-RECVFROM:$BIND_PORT,fork,reuseaddr SYSTEM:"dirtydns-forwarder"
+exec socat -u UDP4-RECVFROM:$BIND_PORT,fork,reuseaddr EXEC:"dirtydns-forwarder"

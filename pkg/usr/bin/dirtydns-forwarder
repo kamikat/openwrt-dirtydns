@@ -5,28 +5,40 @@ R_FILE="$(mktemp)"
 
 cat > $Q_FILE;
 
+QUESTION_NAME=$(hexdump -e '256/1 "%_p"' -s 13 $Q_FILE | sed -e 's/\.*$//')
 CLIENT_ADDR="$SOCAT_PEERADDR:$SOCAT_PEERPORT,sourceport=$BIND_PORT,reuseaddr"
 
-if hexdump -e '256/1 " %02x"' $Q_FILE | grep '00 00 01 00 01  ' 1>/dev/null 2>&1; then
-  socat - UDP4-SENDTO:$DIRTY_UPSTREAM < $Q_FILE > $R_FILE
-  ANSWER_IP_ADDR=$(hexdump -e '256/1 " %02x"' < $R_FILE | grep -o '00 01 00 01 .. .. .. .. 00 04 .. .. .. ..  ' | cut -d' ' -f11-)
-  if [ -n "$ANSWER_IP_ADDR" ]; then
-    IP_ADDR=$(echo $ANSWER_IP_ADDR | awk -e '{ print ("0x" $1) + 0 "." ("0x" $2) + 0 "." ("0x" $3) + 0 "." ("0x" $4) + 0 }')
-    QUESTION_NAME=$(hexdump -e '256/1 "%_p"' -s 13 $Q_FILE | sed -e 's/\.*$//')
-    if ipset test $DIRTY_IPSET "$IP_ADDR" 2>/dev/null; then
-      echo "$QUESTION_NAME [$IP_ADDR] is in $DIRTY_IPSET, return."
-      socat - UDP4-SENDTO:$CLIENT_ADDR < $R_FILE
+query() {
+  read __QUERY_START _ < /proc/uptime
+
+  if hexdump -e '256/1 " %02x"' $Q_FILE | grep '00 00 01 00 01  ' 1>/dev/null 2>&1; then
+    socat - UDP4-SENDTO:$DIRTY_UPSTREAM < $Q_FILE > $R_FILE
+    ANSWER_IP_ADDR=$(hexdump -e '256/1 " %02x"' < $R_FILE | grep -o '00 01 00 01 .. .. .. .. 00 04 .. .. .. ..  ' | cut -d' ' -f11-)
+    if [ -n "$ANSWER_IP_ADDR" ]; then
+      IP_ADDR=$(echo $ANSWER_IP_ADDR | awk -e '{ print ("0x" $1) + 0 "." ("0x" $2) + 0 "." ("0x" $3) + 0 "." ("0x" $4) + 0 }')
+      if ipset test $DIRTY_IPSET "$IP_ADDR" 2>/dev/null; then
+        echo "$QUESTION_NAME [$IP_ADDR] is in $DIRTY_IPSET, return."
+        socat - UDP4-SENDTO:$CLIENT_ADDR < $R_FILE
+      else
+        echo "$QUESTION_NAME [$IP_ADDR] is NOT in $DIRTY_IPSET, forward."
+        socat - UDP4-SENDTO:$SECURED_UPSTREAM < $Q_FILE | socat -u - UDP4-SENDTO:$CLIENT_ADDR
+      fi
     else
-      echo "$QUESTION_NAME [$IP_ADDR] is NOT in $DIRTY_IPSET, forward."
+      # forward non-A answer to secured upstream.
+      echo "$QUESTION_NAME query receives non-A answer, forward."
       socat - UDP4-SENDTO:$SECURED_UPSTREAM < $Q_FILE | socat -u - UDP4-SENDTO:$CLIENT_ADDR
     fi
   else
-    # forward non-A answer to secured upstream.
-    socat - UDP4-SENDTO:$SECURED_UPSTREAM < $Q_FILE | socat -u - UDP4-SENDTO:$CLIENT_ADDR
+    # forward non-A question to dirty upstream
+    echo "$QUESTION_NAME query contains non-A question, forward."
+    socat - UDP4-SENDTO:$DIRTY_UPSTREAM < $Q_FILE | socat -u - UDP4-SENDTO:$CLIENT_ADDR
   fi
-else
-  # forward non-A question to dirty upstream
-  socat - UDP4-SENDTO:$DIRTY_UPSTREAM < $Q_FILE | socat -u - UDP4-SENDTO:$CLIENT_ADDR
-fi
 
-rm -rf $Q_FILE $R_FILE
+  rm -rf $Q_FILE $R_FILE
+
+  read __QUERY_END _ < /proc/uptime
+  __QUERY_TIMING=$(echo | awk -e "{ print $__QUERY_END - $__QUERY_START }")
+  echo "$QUESTION_NAME resolved in ${__QUERY_TIMING}s."
+}
+
+query &
